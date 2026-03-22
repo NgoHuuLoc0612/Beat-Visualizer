@@ -1,0 +1,40 @@
+# Beat Visualizer v3 — Python Dependencies
+# Install with: pip install -r requirements.txt
+
+# ── Web framework ──────────────────────────────────────────────────────────────
+flask
+flask-socketio
+flask-cors
+eventlet
+
+# ── Audio I/O & core processing ────────────────────────────────────────────────
+librosa
+numpy
+scipy
+soundfile
+pydub          # MP3/AAC/WMA/AIFF via ffmpeg
+audioread
+mutagen        # ID3/Vorbis tag reading
+soxr            # High-quality resampling
+
+# ── Advanced audio analysis ────────────────────────────────────────────────────
+# IMPORTANT: use 'praat-parselmouth' NOT 'parselmouth' (different broken package)
+praat-parselmouth   # Praat: jitter, shimmer, HNR, formants, F0
+opensmile          # eGeMAPS 88-feature set (Geneva Minimalistic Acoustic Parameters)
+pyloudnorm          # ITU-R BS.1770-4 integrated loudness (LUFS)
+pretty_midi        # MIDI file parsing and analysis
+mir_eval            # MIR evaluation utilities
+noisereduce         # Spectral noise reduction
+
+# ── Machine learning (optional but recommended) ────────────────────────────────
+scikit-learn      # NMF, PCA, KMeans for structure/timbre analysis
+numba               # JIT acceleration for librosa (speeds up analysis ~3x)
+
+# ── Optional: Dynamic Time Warping ─────────────────────────────────────────────
+# fastdtw requires a C compiler on Windows. Skip if it fails — DTW is optional.
+# If you have Visual C++ Build Tools installed, uncomment:
+fastdtw
+
+# ── Production server ──────────────────────────────────────────────────────────
+gunicorn           # Linux/Mac only. On Windows use waitress instead.
+waitress          # Windows alternative: pip install waitress

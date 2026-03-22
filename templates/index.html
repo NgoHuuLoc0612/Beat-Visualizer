@@ -1,0 +1,522 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Beat Visualizer</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/css/main.css?v={{ static_version }}">
+<!-- CDN libs -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/tone@14.7.77/build/Tone.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="https://cdn.socket.io/4.6.0/socket.io.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/d3@7.8.5/dist/d3.min.js"></script>
+<script src="https://unpkg.com/wavesurfer.js@7/dist/wavesurfer.min.js"></script>
+</head>
+<body>
+<div id="app">
+
+  <!-- ── Topbar ───────────────────────────────────────────────────────── -->
+  <div id="topbar">
+    <div id="logo">BEAT<span>VIZ</span> <small style="color:var(--text3);font-size:10px">v3</small></div>
+    <div id="tab-bar-wrap">
+      <button id="tab-scroll-left" class="tab-scroll-btn" title="Scroll left">&#8249;</button>
+      <div id="tab-bar">
+      <button class="tab-btn active" data-panel="upload">⬆ UPLOAD</button>
+      <button class="tab-btn" data-panel="waveform">〰 WAVEFORM</button>
+      <button class="tab-btn" data-panel="spectrum">📊 SPECTRUM</button>
+      <button class="tab-btn" data-panel="panel-3d">◈ 3D VIEW</button>
+      <button class="tab-btn" data-panel="beats">♩ BEATS</button>
+      <button class="tab-btn" data-panel="harmony">♫ HARMONY</button>
+      <button class="tab-btn" data-panel="mfcc">MFCC</button>
+      <button class="tab-btn" data-panel="pitch">∿ PITCH</button>
+      <button class="tab-btn" data-panel="dynamics">⚡ DYNAMICS</button>
+      <button class="tab-btn" data-panel="structure">▦ STRUCTURE</button>
+      <button class="tab-btn" data-panel="realtime">◉ REALTIME</button>
+      </div>
+      <button id="tab-scroll-right" class="tab-scroll-btn" title="Scroll right">&#8250;</button>
+    </div>
+    <div id="topbar-right">
+      <div class="topbar-stat" id="stat-bpm">BPM <span id="hdr-bpm">—</span></div>
+      <div class="topbar-stat" id="stat-key">KEY <span id="hdr-key">—</span></div>
+      <div class="topbar-stat" id="stat-dur">DUR <span id="hdr-dur">—</span></div>
+      <div class="topbar-stat" id="stat-lufs">LUFS <span id="hdr-lufs">—</span></div>
+    </div>
+  </div>
+
+  <!-- ── Main area ────────────────────────────────────────────────────── -->
+  <div id="main-area">
+
+    <!-- UPLOAD -->
+    <div class="panel active" id="panel-upload">
+      <canvas id="particle-bg"></canvas>
+      <div class="upload-center">
+        <div id="drop-zone">
+          <span class="dz-icon">🎵</span>
+          <div class="dz-title">DROP AUDIO HERE</div>
+          <div class="dz-sub">or click to browse — 60+ formats supported</div>
+          <button class="dz-btn" onclick="document.getElementById('file-input').click()">SELECT FILE</button>
+          <input type="file" id="file-input" hidden accept="*/*">
+          <div class="format-chips" id="format-chips"></div>
+        </div>
+        <div id="progress-wrap">
+          <div class="prog-header">
+            <span id="prog-pct">0%</span>
+            <span id="prog-msg">Initializing…</span>
+          </div>
+          <div id="prog-bar-track"><div id="prog-bar"></div></div>
+          <div class="prog-stages" id="prog-stages"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- WAVEFORM -->
+    <div class="panel" id="panel-waveform">
+      <div class="sub-tabs" id="wf-tabs">
+        <button class="sub-tab active" data-wf="standard">Standard</button>
+        <button class="sub-tab" data-wf="filled">Filled</button>
+        <button class="sub-tab" data-wf="bars">Bars</button>
+        <button class="sub-tab" data-wf="mirror">Mirror</button>
+        <button class="sub-tab" data-wf="stereo">RMS Env</button>
+      </div>
+      <div class="panel-scroll" style="flex:1;overflow:hidden;padding:12px">
+        <div class="card wide" style="height:calc(100% - 24px)">
+          <div class="card-head">
+            <span class="card-title">WAVEFORM</span>
+            <div style="display:flex;gap:6px">
+              <label style="font-size:10px;color:var(--text2);font-family:var(--font-mono);cursor:pointer">
+                <input type="checkbox" id="wf-show-beats" checked> BEATS
+              </label>
+              <label style="font-size:10px;color:var(--text2);font-family:var(--font-mono);cursor:pointer">
+                <input type="checkbox" id="wf-show-onsets"> ONSETS
+              </label>
+              <label style="font-size:10px;color:var(--text2);font-family:var(--font-mono);cursor:pointer">
+                <input type="checkbox" id="wf-show-segs"> SEGMENTS
+              </label>
+            </div>
+          </div>
+          <div class="card-body" style="padding:8px;height:calc(100% - 41px)">
+            <canvas id="canvas-waveform" style="width:100%;height:100%"></canvas>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SPECTRUM -->
+    <div class="panel" id="panel-spectrum">
+      <div class="sub-tabs" id="spec-tabs">
+        <button class="sub-tab active" data-spec="spectrogram">Spectrogram</button>
+        <button class="sub-tab" data-spec="mel">Mel</button>
+        <button class="sub-tab" data-spec="cqt">CQT</button>
+        <button class="sub-tab" data-spec="gammatone">Gammatone</button>
+        <button class="sub-tab" data-spec="power">Power</button>
+        <button class="sub-tab" data-spec="bands">Bands</button>
+        <button class="sub-tab" data-spec="bark">Bark</button>
+      </div>
+      <div class="panel-scroll">
+        <div class="result-grid">
+          <div class="card wide">
+            <div class="card-head"><span class="card-title" id="spec-card-title">SPECTROGRAM (4096-pt STFT)</span></div>
+            <div class="card-body heatmap-wrap" style="padding:4px">
+              <canvas id="canvas-spectrogram" height="200"></canvas>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-head"><span class="card-title">SPECTRAL FEATURES</span></div>
+            <div class="card-body" style="padding:6px;height:200px"><canvas id="chart-spec-features"></canvas></div>
+          </div>
+          <div class="card">
+            <div class="card-head"><span class="card-title">SPECTRAL CONTRAST (7-band)</span></div>
+            <div class="card-body" style="padding:6px;height:200px"><canvas id="chart-contrast"></canvas></div>
+          </div>
+          <div class="card">
+            <div class="card-head"><span class="card-title">TRISTIMULUS</span></div>
+            <div class="card-body" style="padding:6px;height:200px"><canvas id="chart-tristimulus"></canvas></div>
+          </div>
+          <div class="card">
+            <div class="card-head"><span class="card-title">BAND ENERGY (9-band)</span></div>
+            <div class="card-body" style="padding:6px;height:200px"><canvas id="chart-band-energy"></canvas></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 3D -->
+    <div class="panel" id="panel-panel-3d">
+      <canvas id="canvas-3d"></canvas>
+      <div id="controls-3d">
+        <button class="ctrl-btn active" data-mode3d="spectrogram3d">SPECTROGRAM</button>
+        <button class="ctrl-btn" data-mode3d="beatSphere">BEAT SPHERE</button>
+        <button class="ctrl-btn" data-mode3d="waveRing">WAVE RING</button>
+        <button class="ctrl-btn" data-mode3d="particles">PARTICLES</button>
+        <button class="ctrl-btn" data-mode3d="tonnetz3d">TONNETZ</button>
+        <button class="ctrl-btn" id="btn-autorotate">AUTO-ROTATE ✓</button>
+      </div>
+      <div id="info-3d">Drag to orbit · Scroll to zoom</div>
+    </div>
+
+    <!-- BEATS -->
+    <div class="panel" id="panel-beats">
+      <div class="panel-scroll">
+        <div class="result-grid">
+          <div class="card">
+            <div class="card-head"><span class="card-title">TEMPO</span></div>
+            <div id="bpm-ring-wrap">
+              <div id="bpm-ring" style="--pct:0%">
+                <div class="bpm-inner">
+                  <div class="bpm-val" id="bpm-display">—</div>
+                  <div class="bpm-lbl">BPM</div>
+                  <div style="font-size:9px;color:var(--text3);font-family:var(--font-mono)" id="bpm-cat">—</div>
+                </div>
+              </div>
+            </div>
+            <div class="stat-row">
+              <div class="stat-item"><div class="stat-label">DP TRACKER</div><div class="stat-val sm" id="stat-bpm-dp">—</div></div>
+              <div class="stat-item"><div class="stat-label">PERCUSSIVE</div><div class="stat-val sm accent" id="stat-bpm-p">—</div></div>
+              <div class="stat-item"><div class="stat-label">CONFIDENCE</div><div class="stat-val sm accent2" id="stat-bpm-conf">—</div></div>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-head"><span class="card-title">ONSET STRENGTH</span></div>
+            <div class="card-body" style="padding:6px;height:150px"><canvas id="chart-onset"></canvas></div>
+          </div>
+          <div class="card wide">
+            <div class="card-head"><span class="card-title">TEMPOGRAM</span></div>
+            <div class="card-body heatmap-wrap" style="padding:4px">
+              <canvas id="canvas-tempogram" height="130"></canvas>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-head"><span class="card-title">TEMPO CANDIDATES</span></div>
+            <div class="card-body" style="padding:6px;height:180px"><canvas id="chart-tempo-candidates"></canvas></div>
+          </div>
+          <div class="card">
+            <div class="card-head"><span class="card-title">RHYTHM METRICS</span></div>
+            <div class="stat-row">
+              <div class="stat-item"><div class="stat-label">TIME SIG</div><div class="stat-val" id="stat-timesig">—</div></div>
+              <div class="stat-item"><div class="stat-label">BEAT COUNT</div><div class="stat-val sm" id="stat-beatcount">—</div></div>
+            </div>
+            <div class="stat-row">
+              <div class="stat-item"><div class="stat-label">REGULARITY</div><div class="stat-val sm" id="stat-regularity">—</div></div>
+              <div class="stat-item"><div class="stat-label">SWING</div><div class="stat-val sm accent" id="stat-swing">—</div></div>
+              <div class="stat-item"><div class="stat-label">SYNCOPATION</div><div class="stat-val sm accent2" id="stat-sync">—</div></div>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-head"><span class="card-title">PLP ENVELOPE</span></div>
+            <div class="card-body" style="padding:6px;height:130px"><canvas id="chart-plp"></canvas></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- HARMONY -->
+    <div class="panel" id="panel-harmony">
+      <div class="panel-scroll">
+        <div class="result-grid">
+          <div class="card">
+            <div class="card-head"><span class="card-title">KEY ESTIMATION</span></div>
+            <div class="card-body" style="text-align:center;padding:16px">
+              <div id="key-badge-wrap" style="display:inline-block">
+                <div class="key-badge">
+                  <div class="key-name" id="key-name-display">—</div>
+                  <div>
+                    <div class="key-mode" id="key-mode-display">—</div>
+                    <div class="key-conf" id="key-conf-display">—</div>
+                  </div>
+                </div>
+              </div>
+              <div style="margin-top:10px;font-size:10px;color:var(--text2);font-family:var(--font-mono)" id="key-profiles-lbl"></div>
+            </div>
+            <div class="card-body" style="padding:6px;height:150px"><canvas id="chart-ks-profile"></canvas></div>
+          </div>
+          <div class="card">
+            <div class="card-head"><span class="card-title">CHROMA (CQT)</span></div>
+            <div id="pitch-wheel-wrap"><canvas id="canvas-pitch-wheel" width="200" height="200"></canvas></div>
+          </div>
+          <div class="card wide">
+            <div class="card-head"><span class="card-title">CHROMAGRAM (CQT / CENS / STFT)</span>
+              <div class="sub-tabs" style="padding:0;border:none;gap:4px;display:flex">
+                <button class="sub-tab active" data-chroma="cqt" style="padding:3px 8px">CQT</button>
+                <button class="sub-tab" data-chroma="cens" style="padding:3px 8px">CENS</button>
+                <button class="sub-tab" data-chroma="stft" style="padding:3px 8px">STFT</button>
+              </div>
+            </div>
+            <div class="card-body heatmap-wrap" style="padding:4px">
+              <canvas id="canvas-chromagram" height="120"></canvas>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-head"><span class="card-title">CHORD TIMELINE</span></div>
+            <div class="card-body" style="padding:6px">
+              <div id="chord-timeline"><div class="chord-track" id="chord-track"></div></div>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-head"><span class="card-title">TONAL TENSION</span></div>
+            <div class="card-body" style="padding:6px;height:130px"><canvas id="chart-tension"></canvas></div>
+          </div>
+          <div class="card">
+            <div class="card-head"><span class="card-title">HCDF (HARMONIC CHANGE)</span></div>
+            <div class="card-body" style="padding:6px;height:130px"><canvas id="chart-hcdf"></canvas></div>
+          </div>
+          <div class="card wide">
+            <div class="card-head"><span class="card-title">TONNETZ (6D TONAL CENTROID)</span></div>
+            <div class="card-body" style="padding:6px;height:200px"><canvas id="chart-tonnetz"></canvas></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- MFCC -->
+    <div class="panel" id="panel-mfcc">
+      <div class="toggle-group">
+        <button class="tgl active" data-mfcc-view="mfcc40">MFCC-40</button>
+        <button class="tgl" data-mfcc-view="mfcc13">MFCC-13</button>
+        <button class="tgl" data-mfcc-view="delta">Δ (Delta)</button>
+        <button class="tgl" data-mfcc-view="delta2">ΔΔ (Accel)</button>
+        <button class="tgl" data-mfcc-view="bfcc">BFCC (Bark)</button>
+        <button class="tgl" data-mfcc-view="cmvn">CMVN</button>
+      </div>
+      <div class="panel-scroll">
+        <div class="result-grid">
+          <div class="card wide">
+            <div class="card-head"><span class="card-title" id="mfcc-hm-title">MFCC-40 MATRIX</span></div>
+            <div class="card-body heatmap-wrap" style="padding:4px">
+              <canvas id="canvas-mfcc" height="200"></canvas>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-head"><span class="card-title">COEFFICIENT MEANS</span></div>
+            <div class="card-body" style="padding:6px;height:220px"><canvas id="chart-mfcc-mean"></canvas></div>
+          </div>
+          <div class="card">
+            <div class="card-head"><span class="card-title">COEFFICIENT STD</span></div>
+            <div class="card-body" style="padding:6px;height:220px"><canvas id="chart-mfcc-std"></canvas></div>
+          </div>
+          <div class="card wide">
+            <div class="card-head"><span class="card-title">LPC COEFFICIENTS (order 16)</span></div>
+            <div class="card-body" style="padding:6px;height:160px"><canvas id="chart-lpc"></canvas></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- PITCH -->
+    <div class="panel" id="panel-pitch">
+      <div class="panel-scroll">
+        <div class="result-grid">
+          <div class="card wide">
+            <div class="card-head">
+              <span class="card-title">F0 CONTOUR (pYIN + Praat)</span>
+              <div style="display:flex;gap:6px">
+                <label style="font-size:10px;color:var(--text2);font-family:var(--font-mono);cursor:pointer">
+                  <input type="checkbox" id="pitch-show-praat" checked> PRAAT
+                </label>
+                <label style="font-size:10px;color:var(--text2);font-family:var(--font-mono);cursor:pointer">
+                  <input type="checkbox" id="pitch-show-voiced" checked> VOICED ONLY
+                </label>
+              </div>
+            </div>
+            <div class="card-body" style="padding:6px;height:220px"><canvas id="chart-f0"></canvas></div>
+          </div>
+          <div class="card">
+            <div class="card-head"><span class="card-title">VOICED PROBABILITY</span></div>
+            <div class="card-body" style="padding:6px;height:160px"><canvas id="chart-voiced-prob"></canvas></div>
+          </div>
+          <div class="card">
+            <div class="card-head"><span class="card-title">PITCH STATISTICS</span></div>
+            <div class="stat-row">
+              <div class="stat-item"><div class="stat-label">MEAN F0</div><div class="stat-val sm" id="stat-f0-mean">—</div><div class="stat-unit">Hz</div></div>
+              <div class="stat-item"><div class="stat-label">RANGE</div><div class="stat-val sm accent" id="stat-f0-range">—</div><div class="stat-unit">st</div></div>
+              <div class="stat-item"><div class="stat-label">VOICED</div><div class="stat-val sm accent2" id="stat-voiced">—</div></div>
+            </div>
+            <div class="stat-row">
+              <div class="stat-item"><div class="stat-label">VIBRATO</div><div class="stat-val sm" id="stat-vibrato">—</div></div>
+              <div class="stat-item"><div class="stat-label">CONTOUR</div><div class="stat-val sm" id="stat-contour">—</div></div>
+            </div>
+          </div>
+          <div class="card wide">
+            <div class="card-head"><span class="card-title">VOICE QUALITY — Praat (Jitter, Shimmer, HNR, Formants)</span></div>
+            <div class="card-body" style="padding:6px">
+              <table class="vq-table">
+                <thead><tr><th>PARAMETER</th><th>VALUE</th><th>TYPE</th><th>STATUS</th></tr></thead>
+                <tbody id="vq-tbody"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- DYNAMICS -->
+    <div class="panel" id="panel-dynamics">
+      <div class="panel-scroll">
+        <div class="result-grid">
+          <div class="card">
+            <div class="card-head"><span class="card-title">LOUDNESS (ITU-R BS.1770-4)</span></div>
+            <div class="card-body">
+              <div class="lufs-bar-wrap">
+                <div class="lufs-label">Integrated</div>
+                <div class="lufs-track"><div class="lufs-fill" id="lufs-fill-int" style="background:var(--primary)"></div></div>
+                <div class="lufs-val" id="lufs-int">— LUFS</div>
+              </div>
+              <div class="lufs-bar-wrap">
+                <div class="lufs-label">True Peak</div>
+                <div class="lufs-track"><div class="lufs-fill" id="lufs-fill-peak" style="background:var(--accent2)"></div></div>
+                <div class="lufs-val" id="lufs-peak">— dBTP</div>
+              </div>
+              <div class="lufs-bar-wrap">
+                <div class="lufs-label">LRA</div>
+                <div class="lufs-track"><div class="lufs-fill" id="lufs-fill-lra" style="background:var(--accent3)"></div></div>
+                <div class="lufs-val" id="lufs-lra">— LU</div>
+              </div>
+              <div class="stat-row">
+                <div class="stat-item"><div class="stat-label">DYNAMIC RANGE</div><div class="stat-val sm" id="stat-dr">—</div></div>
+                <div class="stat-item"><div class="stat-label">CREST FACTOR</div><div class="stat-val sm accent" id="stat-crest">—</div></div>
+              </div>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-head"><span class="card-title">MUSIC INFO</span></div>
+            <div class="stat-row">
+              <div class="stat-item"><div class="stat-label">DANCEABILITY</div><div class="stat-val sm" id="stat-dance">—</div></div>
+              <div class="stat-item"><div class="stat-label">ENERGY</div><div class="stat-val sm accent" id="stat-energy-mi">—</div></div>
+              <div class="stat-item"><div class="stat-label">VALENCE</div><div class="stat-val sm accent2" id="stat-valence">—</div></div>
+            </div>
+            <div class="stat-row">
+              <div class="stat-item"><div class="stat-label">ACOUSTICNESS</div><div class="stat-val sm" id="stat-acoustic">—</div></div>
+              <div class="stat-item"><div class="stat-label">BRIGHTNESS</div><div class="stat-val sm accent" id="stat-bright">—</div></div>
+              <div class="stat-item"><div class="stat-label">WARMTH</div><div class="stat-val sm accent2" id="stat-warm">—</div></div>
+            </div>
+          </div>
+          <div class="card wide">
+            <div class="card-head"><span class="card-title">RMS ENERGY ENVELOPE</span></div>
+            <div class="card-body" style="padding:6px;height:160px"><canvas id="chart-rms"></canvas></div>
+          </div>
+          <div class="card wide">
+            <div class="card-head"><span class="card-title">SHORT-TERM LOUDNESS (400ms windows)</span></div>
+            <div class="card-body" style="padding:6px;height:130px"><canvas id="chart-shortterm-loud"></canvas></div>
+          </div>
+          <div class="card">
+            <div class="card-head"><span class="card-title">GENRE FINGERPRINT</span></div>
+            <div class="genre-bars" id="genre-bars"></div>
+          </div>
+          <div class="card">
+            <div class="card-head"><span class="card-title">TIMBRE PROFILE</span></div>
+            <div class="card-body" style="padding:6px;height:200px"><canvas id="chart-timbre-radar"></canvas></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- STRUCTURE -->
+    <div class="panel" id="panel-structure">
+      <div class="panel-scroll">
+        <div class="result-grid">
+          <div class="card wide">
+            <div class="card-head"><span class="card-title">SELF-SIMILARITY MATRIX</span></div>
+            <div class="card-body heatmap-wrap" style="padding:4px">
+              <canvas id="canvas-ssm" height="220"></canvas>
+            </div>
+          </div>
+          <div class="card wide">
+            <div class="card-head"><span class="card-title">NOVELTY FUNCTION (checkerboard kernel)</span></div>
+            <div class="card-body" style="padding:6px;height:130px"><canvas id="chart-novelty"></canvas></div>
+          </div>
+          <div class="card wide">
+            <div class="card-head"><span class="card-title">SEGMENT TIMELINE</span></div>
+            <div class="card-body" style="padding:6px">
+              <div id="seg-timeline"></div>
+              <div style="margin-top:8px;font-size:10px;color:var(--text2);font-family:var(--font-mono)" id="seg-info"></div>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-head"><span class="card-title">ENERGY PROFILE + SEGMENTS</span></div>
+            <div class="card-body" style="padding:6px;height:180px"><canvas id="chart-energy-segs"></canvas></div>
+          </div>
+          <div class="card">
+            <div class="card-head"><span class="card-title">SEGMENT STATS</span></div>
+            <div class="stat-row">
+              <div class="stat-item"><div class="stat-label">TOTAL SEGS</div><div class="stat-val" id="stat-nsegs">—</div></div>
+              <div class="stat-item"><div class="stat-label">LP SEGS</div><div class="stat-val sm" id="stat-nsegs-lp">—</div></div>
+              <div class="stat-item"><div class="stat-label">NOVELTY</div><div class="stat-val sm accent" id="stat-nsegs-nov">—</div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- REALTIME -->
+    <div class="panel" id="panel-realtime">
+      <div id="rt-controls">
+        <button class="rt-btn start" id="rt-start">⬤ START MIC</button>
+        <button class="rt-btn stop" id="rt-stop" style="display:none">■ STOP</button>
+        <button class="rt-mode active" data-rtmode="spectrum">SPECTRUM</button>
+        <button class="rt-mode" data-rtmode="waveform">WAVEFORM</button>
+        <button class="rt-mode" data-rtmode="bands">BANDS</button>
+        <button class="rt-mode" data-rtmode="circular">CIRCULAR</button>
+        <button class="rt-mode" data-rtmode="waterfall">WATERFALL</button>
+        <span id="rt-status" style="font-family:var(--font-mono);font-size:11px;color:var(--text2);margin-left:8px">Idle</span>
+      </div>
+      <div id="rt-meters">
+        <div class="rt-meter" title="Sub-bass"><div class="rt-meter-fill" data-band="sub_bass"></div><div class="rt-meter-lbl">SUB</div></div>
+        <div class="rt-meter" title="Bass"><div class="rt-meter-fill" data-band="bass"></div><div class="rt-meter-lbl">BASS</div></div>
+        <div class="rt-meter" title="Low-mid"><div class="rt-meter-fill" data-band="low_mid"></div><div class="rt-meter-lbl">LO-M</div></div>
+        <div class="rt-meter" title="Mid"><div class="rt-meter-fill" data-band="mid"></div><div class="rt-meter-lbl">MID</div></div>
+        <div class="rt-meter" title="Upper-mid"><div class="rt-meter-fill" data-band="upper_mid"></div><div class="rt-meter-lbl">U-M</div></div>
+        <div class="rt-meter" title="Presence"><div class="rt-meter-fill" data-band="presence"></div><div class="rt-meter-lbl">PRES</div></div>
+        <div class="rt-meter" title="Brilliance"><div class="rt-meter-fill" data-band="brilliance"></div><div class="rt-meter-lbl">BRIL</div></div>
+        <div class="rt-meter" title="Air"><div class="rt-meter-fill" data-band="air"></div><div class="rt-meter-lbl">AIR</div></div>
+      </div>
+      <div id="rt-stats">
+        <span class="rt-stat">RMS <span id="rt-rms">—</span> dB</span>
+        <span class="rt-stat">F0 <span id="rt-centroid">—</span> Hz</span>
+        <span class="rt-stat">ZCR <span id="rt-zcr">—</span></span>
+        <span class="rt-stat">FLAT <span id="rt-flat">—</span></span>
+        <span class="rt-stat">PEAK <span id="rt-peak">—</span></span>
+      </div>
+      <canvas id="canvas-rt"></canvas>
+    </div>
+
+  </div><!-- /#main-area -->
+
+  <!-- Player bar -->
+  <div id="player-bar" class="hidden">
+    <button class="play-btn" id="btn-play">▶</button>
+    <div id="timeline-wrap">
+      <div id="timeline-track">
+        <div id="timeline-fill"></div>
+        <div id="timeline-cursor"></div>
+        <div id="beat-ticks"></div>
+        <div id="seg-ticks"></div>
+      </div>
+    </div>
+    <div id="player-time">0:00 / 0:00</div>
+    <div id="export-menu">
+      <button class="export-btn" onclick="document.querySelector('.export-dropdown').classList.toggle('open')">EXPORT ▾</button>
+      <div class="export-dropdown">
+        <div class="exp-item" onclick="BV.app.exportResult('json')">JSON (full)</div>
+        <div class="exp-item" onclick="BV.app.exportResult('csv')">CSV (events)</div>
+        <div class="exp-item" onclick="BV.app.exportResult('midi')">MIDI (beat grid)</div>
+        <div class="exp-item" onclick="BV.app.exportResult('svg')">SVG (timeline)</div>
+      </div>
+    </div>
+  </div>
+
+</div><!-- /#app -->
+
+<div id="toast-container"></div>
+
+<!-- JS modules -->
+<script src="/static/js/utils.js?v={{ static_version }}"></script>
+<script src="/static/js/socket.js?v={{ static_version }}"></script>
+<script src="/static/js/upload.js?v={{ static_version }}"></script>
+<script src="/static/js/visualizer2d.js?v={{ static_version }}"></script>
+<script src="/static/js/visualizer3d.js?v={{ static_version }}"></script>
+<script src="/static/js/realtime.js?v={{ static_version }}"></script>
+<script src="/static/js/app.js?v={{ static_version }}"></script>
+</body>
+</html>
