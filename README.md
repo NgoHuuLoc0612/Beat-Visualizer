@@ -1,6 +1,6 @@
-# 🎵 Beat Visualizer v3 — Enterprise Audio Analysis Platform
+# 🎵 Beat Visualizer v3
 
-A full-stack, enterprise-grade audio analysis and visualization platform combining a Python scientific audio engine (v4.0) with advanced 3D WebGL rendering, real-time WebAudio processing, and 11 interactive visualization panels.
+A full-stack audio analysis and visualization platform combining a Python scientific audio engine (v4.0) with advanced 3D WebGL rendering, real-time WebAudio processing, and 11 interactive visualization panels.
 
 ---
 
